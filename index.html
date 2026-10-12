@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>简单乒乓球游戏</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #111827;
+      font-family: Arial, sans-serif;
+      color: white;
+    }
+
+    .game-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .scoreboard {
+      width: 900px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 28px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      color: #e5e7eb;
+    }
+
+    .score {
+      min-width: 120px;
+      text-align: center;
+      background: rgba(255,255,255,0.04);
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      padding: 10px 18px;
+    }
+
+    canvas {
+      display: block;
+      background: #0f172a;
+      border: 4px solid #94a3b8;
+      border-radius: 8px;
+      box-shadow: 0 0 25px rgba(148, 163, 184, 0.25);
+    }
+
+    .tip {
+      color: #cbd5e1;
+      font-size: 14px;
+      letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-wrap">
+    <div class="scoreboard">
+      <div class="score" id="leftScore">0</div>
+      <div>VS</div>
+      <div class="score" id="rightScore">0</div>
+    </div>
+
+    <canvas id="gameCanvas" width="900" height="500"></canvas>
+
+    <div class="tip">控制：W / S 控制左边球拍，按空格暂停</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const leftScoreEl = document.getElementById("leftScore");
+    const rightScoreEl = document.getElementById("rightScore");
+
+    const paddleWidth = 16;
+    const paddleHeight = 110;
+    const ballSize = 14;
+
+    const leftPaddle = {
+      x: 30,
+      y: canvas.height / 2 - paddleHeight / 2,
+      width: paddleWidth,
+      height: paddleHeight,
+      speed: 430
+    };
+
+    const rightPaddle = {
+      x: canvas.width - 30 - paddleWidth,
+      y: canvas.height / 2 - paddleHeight / 2,
+      width: paddleWidth,
+      height: paddleHeight,
+      speed: 360
+    };
+
+    const ball = {
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+      size: ballSize,
+      vx: 300,
+      vy: 180,
+      speedBoost: 1.04
+    };
+
+    const keys = {
+      w: false,
+      s: false
+    };
+
+    let leftScore = 0;
+    let rightScore = 0;
+    let pause = false;
+    let lastTime = 0;
+
+    function resetBall(direction) {
+      ball.x = canvas.width / 2;
+      ball.y = canvas.height / 2;
+      ball.vx = direction * (300 + Math.random() * 60);
+      ball.vy = (Math.random() * 220) - 110;
+    }
+
+    function updateScore() {
+      leftScoreEl.textContent = leftScore;
+      rightScoreEl.textContent = rightScore;
+    }
+
+    function scorePoint(side) {
+      if (side === "left") {
+        leftScore++;
+      } else {
+        rightScore++;
+      }
+      updateScore();
+      setTimeout(() => {
+        if (side === "left") {
+          resetBall(1);
+        } else {
+          resetBall(-1);
+        }
+      }, 600);
+      pause = true;
+      setTimeout(() => {
+        pause = false;
+      }, 600);
+    }
+
+    function handleInput() {
+      if (keys.w) {
+        leftPaddle.y -= leftPaddle.speed * (1 / 60);
+      }
+      if (keys.s) {
+        leftPaddle.y += leftPaddle.speed * (1 / 60);
+      }
+    }
+
+    function clampPaddle(paddle) {
+      if (paddle.y < 0) paddle.y = 0;
+      if (paddle.y + paddle.height > canvas.height) {
+        paddle.y = canvas.height - paddle.height;
+      }
+    }
+
+    function updateAI() {
+      const paddleCenter = rightPaddle.y + rightPaddle.height / 2;
+      const targetY = ball.y - rightPaddle.height / 2;
+
+      if (ball.x > canvas.width / 2) {
+        if (paddleCenter < targetY) {
+          rightPaddle.y += rightPaddle.speed * (1 / 60);
+        } else if (paddleCenter > targetY) {
+          rightPaddle.y -= rightPaddle.speed * (1 / 60);
+        }
+      }
+
+      clampPaddle(rightPaddle);
+    }
+
+    function updateBall(delta) {
+      ball.x += ball.vx * delta;
+      ball.y += ball.vy * delta;
+
+      // 上下边界碰撞
+      if (ball.y <= 0 || ball.y + ball.size >= canvas.height) {
+        ball.y = Math.max(0, Math.min(ball.y, canvas.height - ball.size));
+        ball.vy *= -1;
+      }
+
+      // 左边界：右方得分
+      if (ball.x + ball.size < 0) {
+        scorePoint("right");
+        return;
+      }
+
+      // 右边界：左方得分
+      if (ball.x > canvas.width) {
+        scorePoint("left");
+        return;
+      }
+
+      // 球和左球拍碰撞
+      if (
+        ball.x <= leftPaddle.x + leftPaddle.width &&
+        ball.x + ball.size >= leftPaddle.x &&
+        ball.y + ball.size >= leftPaddle.y &&
+        ball.y <= leftPaddle.y + leftPaddle.height
+      ) {
+        ball.x = leftPaddle.x + leftPaddle.width;
+        ball.vx = Math.abs(ball.vx) * ball.speedBoost;
+        ball.vy += (ball.y - (leftPaddle.y + leftPaddle.height / 2)) * 0.22;
+      }
+
+      // 球和右球拍碰撞
+      if (
+        ball.x + ball.size >= rightPaddle.x &&
+        ball.x <= rightPaddle.x + rightPaddle.width &&
+        ball.y + ball.size >= rightPaddle.y &&
+        ball.y <= rightPaddle.y + rightPaddle.height
+      ) {
+        ball.x = rightPaddle.x - ball.size;
+        ball.vx = -Math.abs(ball.vx) * ball.speedBoost;
+        ball.vy += (ball.y - (rightPaddle.y + rightPaddle.height / 2)) * 0.22;
+      }
+    }
+
+    function drawRect(x, y, w, h, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+    }
+
+    function drawBall(x, y, size) {
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillRect(x, y, size, size);
+    }
+
+    function drawCenterLine() {
+      ctx.strokeStyle = "rgba(255,255,255,0.25)";
+      ctx.setLineDash([12, 12]);
+      ctx.beginPath();
+      ctx.moveTo(canvas.width / 2, 0);
+      ctx.lineTo(canvas.width / 2, canvas.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawCenterLine();
+
+      drawRect(leftPaddle.x, leftPaddle.y, leftPaddle.width, leftPaddle.height, "#60a5fa");
+      drawRect(rightPaddle.x, rightPaddle.y, rightPaddle.width, rightPaddle.height, "#fca5a5");
+      drawBall(ball.x, ball.y, ball.size);
+
+      // 画球网边缘装饰
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fillRect(0, 0, canvas.width, 4);
+      ctx.fillRect(0, canvas.height - 4, canvas.width, 4);
+    }
+
+    function update(delta) {
+      if (pause) return;
+
+      handleInput();
+      clampPaddle(leftPaddle);
+      updateAI();
+      updateBall(delta);
+    }
+
+    function gameLoop(timestamp) {
+      const delta = (timestamp - lastTime) / 1000 || 0;
+      lastTime = timestamp;
+
+      update(delta);
+      draw();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "w" || e.key === "W") keys.w = true;
+      if (e.key === "s" || e.key === "S") keys.s = true;
+
+      if (e.code === "Space") {
+        pause = !pause;
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      if (e.key === "w" || e.key === "W") keys.w = false;
+      if (e.key === "s" || e.key === "S") keys.s = false;
+    });
+
+    resetBall(1);
+    updateScore();
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
